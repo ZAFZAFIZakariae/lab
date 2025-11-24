@@ -25,7 +25,7 @@ export function loadConfigFromCli(): AppConfig {
     .option(
       "--reconcile-interval <ms>",
       "Reconciliation interval in milliseconds (0 = disabled)",
-      "30000"
+      "60000"
     );
 
   program.parse(process.argv);
