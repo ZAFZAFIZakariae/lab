@@ -6,8 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev:a": "ts-node src/index.ts --nats-url nats://localhost:4222 --bucket config --node-id site-a --rep-subj rep.kv.ops --use-jetstream --peer-nats-url nats://localhost:5222 --reconcile-interval 300000",
-    "dev:b": "ts-node src/index.ts --nats-url nats://localhost:5222 --bucket config --node-id site-b --rep-subj rep.kv.ops --use-jetstream --peer-nats-url nats://localhost:4222 --reconcile-interval 300000",
+    "dev:a": "ts-node src/index.ts --nats-url nats://localhost:4222 --bucket config --node-id site-a --rep-subj rep.kv.ops --use-jetstream --peer-nats-url nats://localhost:5222 --reconcile-interval 30000",
+    "dev:b": "ts-node src/index.ts --nats-url nats://localhost:5222 --bucket config --node-id site-b --rep-subj rep.kv.ops --use-jetstream --peer-nats-url nats://localhost:4222 --reconcile-interval 30000",
     "lint": "echo \"(optional) add eslint here\"",
     "op:a:dark": "ts-node src/publishOp.ts nats://localhost:4222 theme dark site-a",
     "op:b:light": "ts-node src/publishOp.ts nats://localhost:5222 theme light site-b",
