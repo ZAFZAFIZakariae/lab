@@ -110,8 +110,7 @@ function buildOpFromEntry(
 ): Operation | null {
   if (!entry) return null;
 
-  const ts = entry.ts ?? cfg.clock.tick();
-  const effectiveNode = entry.origin ?? nodeId;
+  const ts = cfg.clock.tick();
 
   if (entry.isTombstone) {
     return {
@@ -119,7 +118,7 @@ function buildOpFromEntry(
       bucket: cfg.bucket,
       key,
       ts,
-      nodeId: effectiveNode,
+      nodeId,
     };
   }
 
@@ -131,18 +130,15 @@ function buildOpFromEntry(
     key,
     value: sc.decode(entry.value),
     ts,
-    nodeId: effectiveNode,
+    nodeId,
   };
 }
 
 async function applyOpToKv(kv: KvLike, op: Operation): Promise<void> {
   if (op.op === "delete") {
-    await kv.delete(op.key, { origin: op.nodeId, timestamp: op.ts });
+    await kv.delete(op.key);
     return;
   }
 
-  await kv.put(op.key, sc.encode(op.value!), {
-    origin: op.nodeId,
-    timestamp: op.ts,
-  });
+  await kv.put(op.key, sc.encode(op.value!));
 }

@@ -47,10 +47,9 @@ described in `NATSCRDT.pdf`:
    npm run dev:b
    ```
 
-Each agent watches its local bucket, publishes CRDT operations to the
-replication subject (default `rep.kv.ops`), and applies remote operations that
-win under LWW rules. Local KV writes (CLI, app code, etc.) are detected via a
-watcher on `$KV.<bucket>.>` and stamped with Lamport time + `nodeId`.
+   Each agent watches its local bucket, publishes CRDT operations to the
+   replication subject (default `rep.kv.ops`), and applies remote operations that
+   win under LWW rules.
 
 5. **Validate** by writing conflicting values while one side is offline, then
    bringing it back—both buckets should converge per the LWW+nodeId tie-breaker
@@ -84,11 +83,9 @@ local state.
 
 ## Replication flow
 
-- **Local watcher** (`src/nats/kvWatcher.ts`): subscribes to `$KV.<bucket>.>`
-  (ack-less, deliver-new) and emits CRDT operations for entries that do **not**
-  carry the `KV-Origin` header. Writes from this agent include `KV-Origin` and
-  `KV-Lamport` headers so the watcher avoids loops while preserving the logical
-  timestamp inside KV.
+- **Local watcher** (`src/nats/kvWatcher.ts`): wraps local KV `put`/`delete`,
+  stamps operations with the logical clock, applies them locally, stores
+  metadata, and publishes to the replication subject.
 - **Remote replication** (`src/nats/replication.ts`): subscribes (plain NATS or
   JetStream durable consumer), observes incoming timestamps, and applies only
   operations that win per LWW. Deletes publish tombstones.
@@ -125,10 +122,8 @@ examples):
 - `src/crdt/clock.ts` — Lamport logical clock implementation.
 - `src/crdt/metadataStore.ts` — In-memory version tracking per `(bucket, key)`.
 - `src/nats/connection.ts` — NATS/JetStream connections; lightweight KV facade
-  with tombstone-aware `get` and headers (`KV-Origin`, `KV-Lamport`) for
-  metadata.
-- `src/nats/kvWatcher.ts` — Watches local KV traffic and emits CRDT operations
-  for origin-less events; exposes helpers for programmatic puts/deletes.
+  with tombstone-aware `get`.
+- `src/nats/kvWatcher.ts` — Wraps local writes to emit CRDT operations.
 - `src/nats/replication.ts` — Applies remote operations (plain NATS or
   JetStream durable consumer).
 - `src/nats/reconcile.ts` — State-based anti-entropy reconciliation using the
@@ -148,45 +143,3 @@ npm run build
 
 This compiles the TypeScript sources. (Add your preferred linters or unit tests
 as needed.)
-
-## Respuestas al cuestionario del PDF
-
-- **¿Por qué los CRDT no necesitan consenso global?**  
-  Las operaciones son conmutativas, asociativas e idempotentes; el orden exacto
-  no importa siempre que todos apliquen la misma regla de desempate (LWW +
-  `nodeId`). La convergencia se logra sin líder ni quórums.
-
-- **Ventaja de desempatar por `nodeId`:**  
-  Permite resolver colisiones de timestamp de forma determinista y estable, sin
-  depender de relojes perfectamente sincronizados.
-
-- **Relojes del sistema desincronizados:**  
-  El Lamport lógico (`KV-Lamport`) solo depende de la observación de eventos;
-  crece al recibir/enviar operaciones y no requiere sincronización de reloj de
-  pared.
-
-- **Replicación por operaciones vs. por estado:**  
-  El log `rep.kv.ops` mantiene la intención y reduce tráfico; la reconciliación
-  por estado (`reconcile.ts`) sirve como red de seguridad cuando faltan
-  operaciones (p. ej. purga de stream o nodos apagados).
-
-- **Idempotencia de una actualización CRDT:**  
-  El par `{ts, nodeId}` almacenado en metadata y headers identifica unívocamente
-  la versión; re-aplicar la misma operación no cambia el resultado si no gana
-  según `wins`.
-
-- **¿Por qué combinar JetStream con reconciliación periódica?**  
-  JetStream ofrece durabilidad y reentrega, pero si un consumidor estuvo
-  desconectado demasiado tiempo o se perdieron mensajes, la reconciliación
-  periódica vuelve a alinear buckets sin intervención manual.
-
-- **Pruebas para demostrar convergencia tras partición:**  
-  Simular desconexión (apagar `nats-b`), escribir valores distintos en `config`
-  de cada sitio, reencender `nats-b` y verificar con `ts-node src/checkKv.ts`
-  que ambos convergen al valor LWW. Repetir con un `delete` para comprobar que
-  los tombstones no se resucitan.
-
-- **Diferencias frente a cr-sqlite:**  
-  cr-sqlite integra CRDTs en SQLite con persistencia transaccional; aquí usamos
-  un log NATS/JetStream y un store en memoria. La convergencia es eventual y no
-  hay MVCC ni consultas SQL; el foco es la replicación ligera de KV.

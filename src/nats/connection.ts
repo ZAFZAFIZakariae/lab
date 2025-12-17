@@ -23,21 +23,13 @@ export async function connectToNats(url: string): Promise<NatsConnection> {
 export interface KvEntry {
   value: Uint8Array | null;
   isTombstone: boolean;
-  origin?: string;
-  ts?: number;
-  revision?: number;
-}
-
-export interface KvWriteOptions {
-  origin?: string;
-  timestamp?: number;
 }
 
 export interface KvLike {
   bucket: string;
-  put(key: string, value: Uint8Array, opts?: KvWriteOptions): Promise<void>;
+  put(key: string, value: Uint8Array): Promise<void>;
   get(key: string): Promise<KvEntry | null>;
-  delete(key: string, opts?: KvWriteOptions): Promise<void>;
+  delete(key: string): Promise<void>;
   keys(): Promise<string[]>;
 }
 
@@ -70,11 +62,8 @@ export async function createKvBucket(
     bucket: bucketName,
 
     // Publish a value for the key
-    async put(key: string, value: Uint8Array, opts?: KvWriteOptions): Promise<void> {
-      const h = headers();
-      if (opts?.origin) h.set("KV-Origin", opts.origin);
-      if (opts?.timestamp !== undefined) h.set("KV-Lamport", String(opts.timestamp));
-      await js.publish(`$KV.${bucketName}.${key}`, value, { headers: h });
+    async put(key: string, value: Uint8Array): Promise<void> {
+      await js.publish(`$KV.${bucketName}.${key}`, value);
     },
 
     // Get the latest value for the key (if any)
@@ -85,15 +74,9 @@ export async function createKvBucket(
         });
         const kvOperation = msg.header?.get("KV-Operation");
         const isTombstone = kvOperation === "DEL";
-        const origin = msg.header?.get("KV-Origin") ?? undefined;
-        const tsHeader = msg.header?.get("KV-Lamport");
-        const ts = tsHeader ? Number(tsHeader) : msg.seq;
         return {
           value: isTombstone ? null : msg.data,
           isTombstone,
-          origin,
-          ts,
-          revision: msg.seq,
         };
       } catch {
         // If no message exists for that subject, just return null
@@ -102,11 +85,9 @@ export async function createKvBucket(
     },
 
     // "Delete" by publishing a tombstone (header)
-    async delete(key: string, opts?: KvWriteOptions): Promise<void> {
+    async delete(key: string): Promise<void> {
       const h = headers();
       h.set("KV-Operation", "DEL");
-      if (opts?.origin) h.set("KV-Origin", opts.origin);
-      if (opts?.timestamp !== undefined) h.set("KV-Lamport", String(opts.timestamp));
       await js.publish(`$KV.${bucketName}.${key}`, new Uint8Array(), {
         headers: h,
       });

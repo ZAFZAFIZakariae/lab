@@ -15,8 +15,12 @@ async function main() {
 
   const clock = new LogicalClock();
 
-  // 1) Build CRDT operation and write to local KV bucket "config"
+  // 1) Write to local KV bucket "config"
   const { kv } = await createKvBucket(nc, "config");
+  await kv.put(key, sc.encode(value));
+  console.log(`[publishOp] wrote to KV: ${key}=${value}`);
+
+  // 2) Publish CRDT operation on rep.kv.ops
   const op: Operation = {
     op: "put",
     bucket: "config",
@@ -25,10 +29,7 @@ async function main() {
     ts: clock.tick(),   // LWW logical timestamp
     nodeId,
   };
-  await kv.put(key, sc.encode(value), { origin: nodeId, timestamp: op.ts });
-  console.log(`[publishOp] wrote to KV: ${key}=${value}`);
 
-  // 2) Publish CRDT operation on rep.kv.ops
   const json = JSON.stringify(op);
   nc.publish("rep.kv.ops", sc.encode(json));
   await nc.flush();
