@@ -27,7 +27,9 @@ async function main() {
     const decoded = entry.isTombstone
       ? "<tombstone>"
       : sc.decode(entry.value ?? new Uint8Array());
-    console.log(`- ${key} = ${decoded}`);
+    const meta = [`ts=${entry.ts ?? "?"}`];
+    if (entry.origin) meta.push(`origin=${entry.origin}`);
+    console.log(`- ${key} = ${decoded} (${meta.join(", ")})`);
   }
 
   nc.close();
