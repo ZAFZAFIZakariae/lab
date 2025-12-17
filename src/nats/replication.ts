@@ -133,13 +133,16 @@ async function handleOperation(
   }
 
   if (op.op === "put" && typeof op.value === "string") {
-    await ctx.kv.put(op.key, sc.encode(op.value));
+    await ctx.kv.put(op.key, sc.encode(op.value), {
+      origin: op.nodeId,
+      timestamp: op.ts,
+    });
     ctx.metadataStore.set(ctx.bucket, op.key, remoteVersion);
     console.log(
       `[replication] applied remote PUT ${op.key}=${op.value} from ${op.nodeId}`
     );
   } else if (op.op === "delete") {
-    await ctx.kv.delete(op.key);
+    await ctx.kv.delete(op.key, { origin: op.nodeId, timestamp: op.ts });
     ctx.metadataStore.set(ctx.bucket, op.key, remoteVersion);
     console.log(
       `[replication] applied remote DELETE ${op.key} from ${op.nodeId}`
