@@ -8,7 +8,6 @@ import {
 import { KvLike, sc } from "./connection";
 import { MetadataStore } from "../crdt/metadataStore";
 import { Operation, versionFromOp, wins } from "../crdt/lww";
-import { LogicalClock } from "../crdt/clock";
 
 export interface ReplicationContext {
   nc: NatsConnection;
@@ -18,7 +17,6 @@ export interface ReplicationContext {
   nodeId: string;
   repSubject: string;
   metadataStore: MetadataStore;
-  clock: LogicalClock;
 }
 
 export async function startReplicationSubscriber(
@@ -125,7 +123,6 @@ async function handleOperation(
 
   const remoteVersion = versionFromOp(op);
   const localVersion = ctx.metadataStore.get(ctx.bucket, op.key);
-  ctx.clock.observe(op.ts);
 
   if (!wins(remoteVersion, localVersion)) {
     // local wins; ignore remote op

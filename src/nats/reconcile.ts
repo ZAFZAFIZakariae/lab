@@ -1,6 +1,5 @@
-import { connectToNats, createKvBucket, KvEntry, KvLike, sc } from "./connection";
-import { Operation, versionFromOp, wins } from "../crdt/lww";
-import { LogicalClock } from "../crdt/clock";
+import { connectToNats, createKvBucket, KvLike, sc } from "./connection";
+import { Operation, versionFromOp, wins, nowTs } from "../crdt/lww";
 
 export interface PeriodicReconcileConfig {
   localNatsUrl: string;
@@ -8,7 +7,6 @@ export interface PeriodicReconcileConfig {
   bucket: string;
   nodeId: string;
   intervalMs: number;
-  clock: LogicalClock;
 }
 
 export async function startPeriodicReconciliation(
@@ -69,25 +67,49 @@ async function reconcileKey(
   localKv: KvLike,
   peerKv: KvLike
 ): Promise<void> {
-  const [localEntry, peerEntry] = await Promise.all([
+  const [localVal, peerVal] = await Promise.all([
     localKv.get(key),
     peerKv.get(key),
   ]);
 
-  const localOp = buildOpFromEntry(localEntry, cfg, key, cfg.nodeId + "-local");
-  const peerOp = buildOpFromEntry(peerEntry, cfg, key, cfg.nodeId + "-peer");
+  // Build pseudo-ops. In a better version, you would load real ts/nodeId from metadata.
+  const now = nowTs();
+
+  const localOp: Operation | null = localVal
+    ? {
+        op: "put",
+        bucket: cfg.bucket,
+        key,
+        value: sc.decode(localVal),
+        ts: now,
+        nodeId: cfg.nodeId + "-local", // differentiate
+      }
+    : null;
+
+  const peerOp: Operation | null = peerVal
+    ? {
+        op: "put",
+        bucket: cfg.bucket,
+        key,
+        value: sc.decode(peerVal),
+        ts: now,
+        nodeId: cfg.nodeId + "-peer",
+      }
+    : null;
 
   if (!localOp && !peerOp) {
     return; // nothing to do
   }
 
   if (localOp && !peerOp) {
-    await applyOpToKv(peerKv, localOp);
+    // only local has value → push to peer
+    await peerKv.put(key, sc.encode(localOp.value!));
     return;
   }
 
   if (!localOp && peerOp) {
-    await applyOpToKv(localKv, peerOp);
+    // only peer has value → pull to local
+    await localKv.put(key, sc.encode(peerOp.value!));
     return;
   }
 
@@ -97,48 +119,8 @@ async function reconcileKey(
 
   const remoteWins = wins(peerVersion, localVersion);
   const winnerOp = remoteWins ? peerOp! : localOp!;
+  const winnerVal = winnerOp.value!;
 
-  await applyOpToKv(localKv, winnerOp);
-  await applyOpToKv(peerKv, winnerOp);
-}
-
-function buildOpFromEntry(
-  entry: KvEntry | null,
-  cfg: PeriodicReconcileConfig,
-  key: string,
-  nodeId: string
-): Operation | null {
-  if (!entry) return null;
-
-  const ts = cfg.clock.tick();
-
-  if (entry.isTombstone) {
-    return {
-      op: "delete",
-      bucket: cfg.bucket,
-      key,
-      ts,
-      nodeId,
-    };
-  }
-
-  if (!entry.value) return null;
-
-  return {
-    op: "put",
-    bucket: cfg.bucket,
-    key,
-    value: sc.decode(entry.value),
-    ts,
-    nodeId,
-  };
-}
-
-async function applyOpToKv(kv: KvLike, op: Operation): Promise<void> {
-  if (op.op === "delete") {
-    await kv.delete(op.key);
-    return;
-  }
-
-  await kv.put(op.key, sc.encode(op.value!));
+  await localKv.put(key, sc.encode(winnerVal));
+  await peerKv.put(key, sc.encode(winnerVal));
 }

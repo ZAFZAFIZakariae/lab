@@ -20,15 +20,10 @@ export async function connectToNats(url: string): Promise<NatsConnection> {
 /**
  * Minimal KV-like interface our code uses.
  */
-export interface KvEntry {
-  value: Uint8Array | null;
-  isTombstone: boolean;
-}
-
 export interface KvLike {
   bucket: string;
   put(key: string, value: Uint8Array): Promise<void>;
-  get(key: string): Promise<KvEntry | null>;
+  get(key: string): Promise<Uint8Array | null>;
   delete(key: string): Promise<void>;
   keys(): Promise<string[]>;
 }
@@ -67,17 +62,12 @@ export async function createKvBucket(
     },
 
     // Get the latest value for the key (if any)
-    async get(key: string): Promise<KvEntry | null> {
+    async get(key: string): Promise<Uint8Array | null> {
       try {
         const msg = await jsm.streams.getMessage(streamName, {
           last_by_subj: `$KV.${bucketName}.${key}`,
         });
-        const kvOperation = msg.header?.get("KV-Operation");
-        const isTombstone = kvOperation === "DEL";
-        return {
-          value: isTombstone ? null : msg.data,
-          isTombstone,
-        };
+        return msg.data;
       } catch {
         // If no message exists for that subject, just return null
         return null;

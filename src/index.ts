@@ -4,7 +4,6 @@ import { startLocalWatcher } from "./nats/kvWatcher";
 import { startReplicationSubscriber } from "./nats/replication";
 import { InMemoryMetadataStore } from "./crdt/metadataStore";
 import { startPeriodicReconciliation } from "./nats/reconcile";
-import { LogicalClock } from "./crdt/clock";
 
 async function main() {
   const config = loadConfigFromCli();
@@ -21,7 +20,6 @@ async function main() {
 
   // Metadata CRDT store
   const metadataStore = new InMemoryMetadataStore();
-  const clock = new LogicalClock();
 
   // Start local watcher → publishes operations for local changes
   await startLocalWatcher({
@@ -32,7 +30,6 @@ async function main() {
     nodeId: config.nodeId,
     repSubject: config.repSubject,
     metadataStore,
-    clock,
   });
 
   // Start replication subscriber → applies remote operations
@@ -44,7 +41,6 @@ async function main() {
     nodeId: config.nodeId,
     repSubject: config.repSubject,
     metadataStore,
-    clock,
   });
 
   // Optional periodic reconciliation (state-based)
@@ -55,7 +51,6 @@ async function main() {
       bucket: config.bucket,
       nodeId: config.nodeId,
       intervalMs: config.reconcileIntervalMs,
-      clock,
     });
   } else {
     console.log("[reconcile] periodic reconciliation disabled (no interval or no peer url)");
