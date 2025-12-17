@@ -1,7 +1,8 @@
 import { JetStreamClient, NatsConnection } from "nats";
 import { KvLike, sc } from "./connection";
 import { MetadataStore } from "../crdt/metadataStore";
-import { Operation, nowTs, versionFromOp } from "../crdt/lww";
+import { Operation, versionFromOp } from "../crdt/lww";
+import { LogicalClock } from "../crdt/clock";
 
 export interface LocalWatcherContext {
   nc: NatsConnection;
@@ -11,6 +12,7 @@ export interface LocalWatcherContext {
   nodeId: string;
   repSubject: string;
   metadataStore: MetadataStore;
+  clock: LogicalClock;
 }
 
 /**
@@ -28,7 +30,7 @@ export async function startLocalWatcher(ctx: LocalWatcherContext): Promise<void>
       bucket: ctx.bucket,
       key,
       value,
-      ts: nowTs(),
+      ts: ctx.clock.tick(),
       nodeId: ctx.nodeId,
     };
 
@@ -52,7 +54,7 @@ export async function startLocalWatcher(ctx: LocalWatcherContext): Promise<void>
       op: "delete",
       bucket: ctx.bucket,
       key,
-      ts: nowTs(),
+      ts: ctx.clock.tick(),
       nodeId: ctx.nodeId,
     };
 
