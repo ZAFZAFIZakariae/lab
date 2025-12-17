@@ -55,6 +55,33 @@ described in `NATSCRDT.pdf`:
    bringing it back—both buckets should converge per the LWW+nodeId tie-breaker
    using the logical clock timestamps.
 
+## Helper scripts for manual testing
+
+With both agents running, you can publish sample operations and inspect bucket
+contents using the included npm scripts:
+
+- Publish a dark theme preference from site A:
+
+  ```bash
+  npm run op:a:dark
+  ```
+
+- Publish a light theme preference from site B:
+
+  ```bash
+  npm run op:b:light
+  ```
+
+- Inspect each KV bucket (tombstones are shown explicitly):
+
+  ```bash
+  npm run kv:a
+  npm run kv:b
+  ```
+
+These scripts help verify replication behavior while toggling values and
+observing convergence across both sites.
+
 ## CRDT design (LWW register)
 
 - **Operation shape** (`src/crdt/lww.ts`):
