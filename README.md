@@ -149,6 +149,23 @@ npm run build
 This compiles the TypeScript sources. (Add your preferred linters or unit tests
 as needed.)
 
+To exercise the flows against the local NATS pair started via Docker, you can
+use the helper scripts:
+
+```bash
+# Publish an operation from site A (writes `theme=dark`)
+npm run op:a:dark
+
+# Publish an operation from site B (writes `theme=light`)
+npm run op:b:light
+
+# Inspect the KV bucket at site A
+npm run kv:a
+
+# Inspect the KV bucket at site B
+npm run kv:b
+```
+
 ## Respuestas al cuestionario del PDF
 
 - **¿Por qué los CRDT no necesitan consenso global?**  
