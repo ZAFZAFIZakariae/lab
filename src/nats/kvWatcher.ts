@@ -26,6 +26,9 @@ export interface LocalWatcherContext {
 export async function startLocalWatcher(ctx: LocalWatcherContext): Promise<void> {
   console.log("[local] watcher initialized");
 
+  // Seed metadata with existing KV entries so win/loss decisions reflect current state
+  await seedMetadataFromKv(ctx);
+
   // Watch KV changes and publish CRDT operations for locally-originated writes
   const js = ctx.jsCtx ?? ctx.nc.jetstream();
   const subject = `$KV.${ctx.bucket}.>`;
@@ -40,7 +43,17 @@ export async function startLocalWatcher(ctx: LocalWatcherContext): Promise<void>
     for await (const msg of sub) {
       const origin = msg.headers?.get("KV-Origin");
       if (origin) {
-        // Skip events we wrote ourselves (or remote replicas applied) to avoid loops
+        // Skip publishing for events that already carry an origin (written by an agent)
+        // but still update local metadata so stale entries do not win later conflicts.
+        const isDelete = msg.headers?.get("KV-Operation") === "DEL";
+        const tsHeader = msg.headers?.get("KV-Lamport");
+        const ts = tsHeader ? Number(tsHeader) : msg.seq;
+        ctx.clock.observe(ts);
+        ctx.metadataStore.set(ctx.bucket, msg.subject.substring(`$KV.${ctx.bucket}.`.length), {
+          ts,
+          nodeId: origin,
+          tombstone: isDelete,
+        });
         continue;
       }
 
@@ -103,5 +116,30 @@ async function publishOperation(ctx: LocalWatcherContext, op: Operation): Promis
     await ctx.jsCtx.publish(ctx.repSubject, payload);
   } else {
     ctx.nc.publish(ctx.repSubject, payload);
+  }
+}
+
+/**
+ * On startup, pre-load metadata from existing KV entries so replication decisions
+ * consider the latest known versions (even if written before this process started).
+ */
+async function seedMetadataFromKv(ctx: LocalWatcherContext): Promise<void> {
+  const keys = await ctx.kv.keys();
+  for (const key of keys) {
+    const entry = await ctx.kv.get(key);
+    if (!entry) continue;
+
+    const ts = entry.ts ?? ctx.clock.tick();
+    ctx.clock.observe(ts);
+
+    const nodeId = entry.origin ?? "unknown";
+    ctx.metadataStore.set(ctx.bucket, key, {
+      ts,
+      nodeId,
+      tombstone: entry.isTombstone,
+    });
+  }
+  if (keys.length > 0) {
+    console.log(`[local] metadata seeded for ${keys.length} existing key(s)`);
   }
 }
