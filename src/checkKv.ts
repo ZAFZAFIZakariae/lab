@@ -18,8 +18,15 @@ async function main() {
   console.log(`[checkKv] KV bucket 'config' contains:`);
 
   for (const key of keys) {
-    const value = await kv.get(key);
-    const decoded = value ? sc.decode(value) : "<null>";
+    const entry = await kv.get(key);
+    if (!entry) {
+      console.log(`- ${key} = <missing>`);
+      continue;
+    }
+
+    const decoded = entry.isTombstone
+      ? "<tombstone>"
+      : sc.decode(entry.value ?? new Uint8Array());
     console.log(`- ${key} = ${decoded}`);
   }
 

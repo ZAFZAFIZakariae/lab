@@ -45,12 +45,3 @@ export function versionFromOp(op: Operation): Version {
     tombstone: op.op === "delete",
   };
 }
-
-/**
- * A helper function to generate a timestamp.
- * For simplicity we use Date.now(). In a more advanced version
- * you can implement logical clocks (Lamport, vector clocks, etc.).
- */
-export function nowTs(): number {
-  return Date.now();
-}
